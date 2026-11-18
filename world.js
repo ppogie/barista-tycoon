@@ -3,6 +3,7 @@
  * is a transparent 2D sprite: this is intentional 2.5D rendering.
  */
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
+import {buildWalls,buildSurroundings,buildDecor} from './scenery.js';
 
 const palette={wood:0xa67458,woodDark:0x735244,cream:0xffe6c5,ceramic:0xf9f2eb,pink:0xdba5aa,leaf:0x739078,iron:0xc8c7c5};
 const mat=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.85,...extra});
@@ -16,7 +17,7 @@ export class CafeWorld {
   constructor(container,{onMove}={}){
     this.container=container;this.onMove=onMove||(()=>{});this.size=10;
     this.active=true;this.keys=new Set();this.path=[];this.playerCell={x:7,z:8};this.walkSpeed=3.1;
-    this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#f2e4d4');this.scene.fog=new THREE.Fog('#f2e4d4',24,50);
+    this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#e9cda5');this.scene.fog=new THREE.Fog('#e9cda5',34,70);
     this.camera=new THREE.OrthographicCamera(-8,8,8,-8,.1,130);
     this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
@@ -25,11 +26,11 @@ export class CafeWorld {
     this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
     this.renderer.domElement.setAttribute('aria-label','Kedai café 3D isometric. Tap pada tiles untuk bergerak.');
     container.appendChild(this.renderer.domElement);
-    this.scene.add(new THREE.HemisphereLight(0xffffff,0xd2aa8f,2.45));
-    const sun=new THREE.DirectionalLight(0xfff2da,2.7);sun.position.set(-3,15,9);sun.castShadow=true;
+    this.scene.add(new THREE.HemisphereLight(0xffe9c8,0xb98f6c,2.1));
+    const sun=new THREE.DirectionalLight(0xffd9a6,2.3);sun.position.set(-3,15,9);sun.castShadow=true;
     sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-19;sun.shadow.camera.right=19;sun.shadow.camera.top=19;sun.shadow.camera.bottom=-19;
     sun.shadow.normalBias=.035;this.scene.add(sun);
-    const ground=box(90,.12,90,0xebdccb);ground.position.y=-.32;ground.receiveShadow=true;this.scene.add(ground);
+    const ground=box(90,.12,90,0xb9a98f);ground.position.y=-.32;ground.receiveShadow=true;this.scene.add(ground);
     this.floor=new THREE.Group();this.scene.add(this.floor);
     this.furniture=new THREE.Group();this.scene.add(this.furniture);
     this.blocked=new Set();
@@ -57,22 +58,15 @@ export class CafeWorld {
     this.size=size;while(this.floor.children.length){const o=this.floor.children[0];this.floor.remove(o);o.traverse(child=>{if(child.geometry)child.geometry.dispose()})}
     const frame=box(size+.55,.17,size+.55,0xb17b61);frame.position.set(size/2,-.13,size/2);frame.receiveShadow=true;this.floor.add(frame);
     const tileGeo=new THREE.BoxGeometry(.987,.11,.987);
-    const m1=mat(0xffebd4),m2=mat(0xfbe4ce),m3=mat(0xffe1d4);
+    const m1=mat(0xe2c59a),m2=mat(0xd9b98c),m3=mat(0xe6cfa6);
     for(let z=0;z<size;z++)for(let x=0;x<size;x++){
       const mesh=new THREE.Mesh(tileGeo,(x+z)%9===0?m3:(x+z)%2?m1:m2);
       mesh.position.set(x+.5,.005,z+.5);mesh.receiveShadow=true;this.floor.add(mesh);
     }
-    // short walls along back and left edges keep the café visible from the camera
-    addBox(this.floor,size+.3,.9,.17,0xf8d5cb,size/2,.43,-.07);
-    addBox(this.floor,.17,.9,size+.3,0xf8d5cb,-.07,.43,size/2);
-    addBox(this.floor,size+.4,.11,.24,0xe7ac9e,size/2,.92,-.07);
-    addBox(this.floor,.24,.11,size+.4,0xe7ac9e,-.07,.92,size/2);
-    // window-style trim
-    for(let i=1;i<=Math.min(6,size-1);i+=2){
-      addBox(this.floor,.07,.68,.12,0xfaf0dc,i+.5,.55,-.07);
-    }
+    this.buildEnv(size);
     this.positionCamera();
   }
+  buildEnv(size){if(this.env)this.scene.remove(this.env);this.env=new THREE.Group();this.scene.add(this.env);buildWalls(this.env,size);buildSurroundings(this.env,size)}
   buildFurniture(){
     // Espresso counter and machine
     const counter=new THREE.Group();counter.position.set(3.2,0,2.2);this.furniture.add(counter);
@@ -89,9 +83,7 @@ export class CafeWorld {
     // 2 little dining setups
     this.addTable(6.7,5.3);this.addTable(3.8,7.2);
     this.addPlant(8.9,1.3,1);this.addPlant(1.15,5.65,.94);this.addPlant(8.9,8.7,1.12);
-    // menu sign on back wall
-    addBox(this.furniture,1.9,.64,.11,0x766454,7.1,.71,.13);
-    const sign=addBox(this.furniture,1.68,.48,.13,0x51484a,7.1,.71,.22);sign.material=mat(0x5b4c52);
+    buildDecor(this);
     // walkway map - furniture should not be walked through
     [[2,2],[3,2],[4,2],[6,5],[7,5],[3,7],[4,7],[9,1],[1,5],[9,9]].forEach(([x,z])=>this.blocked.add(`${x},${z}`));
   }
@@ -125,7 +117,7 @@ export class CafeWorld {
   setActive(active){this.active=!!active;this.keys.clear();this.highlight.visible=false;this.resize()}
   positionCamera(){
     const center=this.size/2;this.camera.position.set(center+this.size*.95,this.size*1.2,center+this.size*.95);
-    this.camera.lookAt(center,0,center);this.camera.zoom=this.size<=10?1:this.size===15?.9:.82;this.camera.updateProjectionMatrix();this.resize();
+    this.camera.lookAt(center,.8,center);this.camera.zoom=this.size<=10?1:this.size===15?.9:.82;this.camera.updateProjectionMatrix();this.resize();
   }
   resize(){if(!this.container)return;const w=this.container.clientWidth,h=this.container.clientHeight;if(w<5||h<5)return;
     this.renderer.setSize(w,h,false);const ratio=w/h,halfH=8.75;
