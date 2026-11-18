@@ -67,3 +67,11 @@ barista-tycoon/
 - Three.js is loaded from `cdn.jsdelivr.net`, and Google Fonts are optional.
 - This is a standalone static project; Node, npm, and GitHub Actions are **not required** to publish it.
 - `localStorage` save data is not connected to real money or accounts.
+
+## v0.2 update
+
+- Real gameplay loop (`game.js`): NPC customers walk in, queue, order, sit, tip, leave, or storm off when impatient
+- Press **E** (or the Serve button) near the counter to serve; income goes to your wallet
+- Reputation, 120-second days, wages, and a ×1/×2/×3 speed button
+- Savings deposit/withdraw with history, hire up to 3 helper baristas, live customer stats
+- Old saves still load (new fields get defaults)

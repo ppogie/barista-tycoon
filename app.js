@@ -1,5 +1,6 @@
 import {drawAvatar,HAIR_COLORS,SKIN_TONES,APRON_COLORS} from './avatar.js';
 import {CafeWorld} from './world.js';
+import {CafeGame} from './game.js';
 
 const $=(selector)=>document.querySelector(selector);
 const $$=(selector)=>Array.from(document.querySelectorAll(selector));
@@ -8,9 +9,9 @@ const money=(value)=>'$'+Number(value||0).toLocaleString('en-US');
 const costs={10:2000,15:5000,20:12000,25:25000};
 const drinks=[['☕','Iced Americano',5],['🥛','Iced Latte',6],['☁️','Cappuccino',7],['🍫','Iced Mocha',8],['🍵','Matcha Latte',8]];
 const look={gender:'female',hairStyle:'bob',hair:HAIR_COLORS[0],skin:SKIN_TONES[0],apron:APRON_COLORS[0]};
-let saveData=readSave();let world=null;let toastTimeout=null;
+let saveData=readSave();let world=null;let game=null;let toastTimeout=null;
 const avatarCanvas=$('#avatar-preview');
-function readSave(){try{const d=JSON.parse(localStorage.getItem(KEY));return d&&d.version===1&&d.player?.name&&Number.isFinite(d.wallet)?d:null}catch{return null}}
+function readSave(){try{const d=JSON.parse(localStorage.getItem(KEY));return d&&d.version===1&&d.player?.name&&Number.isFinite(d.wallet)?{staff:0,day:1,rep:1,served:0,log:[],...d}:null}catch{return null}}
 function writeSave(){if(!saveData)return;try{localStorage.setItem(KEY,JSON.stringify(saveData))}catch{toast('Save tidak dapat disimpan dalam browser ini.')};refreshContinue()}
 function refreshContinue(){$('#continue-game').hidden=!saveData}
 function showScreen(name){for(const node of $$('.screen'))node.hidden=node.id!==`${name}-screen`;if(world)world.setActive(name==='game')}
@@ -29,7 +30,7 @@ $('#create-confirm').addEventListener('click',()=>{
   const name=$('#player-name').value.trim();const cafe=$('#cafe-name').value.trim();
   if(!name){$('#player-name').focus();return toast('Masukkan nama karakter dahulu ✿')}
   if(!cafe){$('#cafe-name').focus();return toast('Masukkan nama café dahulu ✿')}
-  saveData={version:1,player:{name,cafe,look:{...look}},wallet:3500,savings:0,shopSize:10,position:{x:7,z:8},createdAt:new Date().toISOString()};
+  saveData={version:1,player:{name,cafe,look:{...look}},wallet:3500,savings:0,staff:0,day:1,rep:1,served:0,log:[],shopSize:10,position:{x:7,z:8},createdAt:new Date().toISOString()};
   writeSave();enterCafe(true);
 });
 function enterCafe(isNew=false){
@@ -42,13 +43,15 @@ function enterCafe(isNew=false){
   if(world){world.destroy();world=null}
   world=new CafeWorld($('#world-canvas'),{onMove:(x,z)=>{if(!saveData)return;saveData.position={x,z};writeSave()}});
   world.updateAvatar(textureCanvas);
+  game=new CafeGame(world,saveData,{changed:()=>{writeSave();updateHud()},toast,dayEnd:r=>toast(`Hari ${r.day} tamat: jualan ${money(r.income)}, gaji ${money(r.wages)} ✦`)});
+  world.onFrame=dt=>game.update(dt);
   if(saveData.shopSize>10)world.expand(saveData.shopSize);
   world.setPlayerCell(saveData.position.x,saveData.position.z,false);
   world.setActive(true);updateHud();setPanel('shop',false);
   if(isNew)toast(`Selamat datang ke ${player.cafe}! ♡`);
 }
 function updateHud(){
-  if(!saveData)return;
+  if(!saveData)return;refreshExtras();
   $('#hud-wallet').textContent=money(saveData.wallet);$('#hud-savings').textContent=money(saveData.savings);
   $('#savings-panel-balance').textContent=money(saveData.savings);
   $('#saving-progress').style.width=Math.min(100,saveData.savings/5000*100)+'%';
@@ -79,4 +82,19 @@ $$('.nav-item').forEach(item=>item.addEventListener('click',()=>{
 }));
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape')$('.details-panel').classList.remove('open')});
 $('#drink-list').innerHTML=drinks.map(([emoji,name,price])=>`<div class="drink-card"><div class="drink-emoji">${emoji}</div><div class="drink-desc"><strong>${name}</strong><small>Starter recipe</small></div><b>${money(price)}</b></div>`).join('');
+function refreshExtras(){
+  const s=saveData,r=Math.round(s.rep);
+  $('#world-chapter-text').textContent=`DAY ${String(s.day).padStart(2,'0')} • ${'★'.repeat(r)}${'☆'.repeat(5-r)}`;
+  $('#staff-count').textContent=`${s.staff} / 3`;$('#hire-button').disabled=s.staff>=3||s.wallet<400;$('#hire-button').textContent=s.staff>=3?'Team Full ♡':'Hire Barista · $400';
+  $('#savings-log').innerHTML=s.log.map(l=>`<div class="item-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('')||'<small>Belum ada transaksi.</small>';
+  $('#dep-btn').disabled=s.wallet<=0;$('#wd-btn').disabled=s.savings<=0;
+}
+const move=(from,to,label)=>{const a=Math.min(Math.floor(+$('#amount').value)||0,saveData[from]);if(a<=0)return toast('Jumlah tidak sah ✿');saveData[from]-=a;saveData[to]+=a;saveData.log.unshift([label,money(a)]);saveData.log.length=Math.min(saveData.log.length,6);writeSave();updateHud()};
+$('#dep-btn').onclick=()=>move('wallet','savings','Deposit');$('#wd-btn').onclick=()=>move('savings','wallet','Withdraw');
+$('#hire-button').onclick=()=>{if(saveData.staff>=3||saveData.wallet<400)return;saveData.wallet-=400;saveData.staff++;game?.syncStaff();writeSave();updateHud();toast('Barista baru diambil bekerja ♡')};
+const doServe=()=>{if(!game||$('#game-screen').hidden)return;const r=game.serve('you');if(r==='far')toast('Dekat sikit dengan kaunter ☕');else if(!r)toast('Tiada pelanggan menunggu.')};
+$('#serve-btn').onclick=doServe;
+addEventListener('keydown',e=>{if((e.key==='e'||e.key==='E')&&!/INPUT/.test(e.target.tagName))doServe()});
+$('#speed-btn').onclick=()=>{if(!game)return;game.speed=game.speed%3+1;$('#speed-btn').textContent='×'+game.speed};
+setInterval(()=>{if(!game||$('#game-screen').hidden)return;const q=game.snapshot();$('#cust-stats').innerHTML=[['Dalam barisan',q.queue],['Sedang minum',q.seated],['Dilayan hari ini',q.served],['Jualan hari ini',money(q.income)],['Pelanggan hilang',q.lost],['Hari tamat dalam',q.left+'s'],['Jumlah dilayan',saveData.served]].map(([a,b])=>`<div class="item-line"><span>${a}</span><b>${b}</b></div>`).join('')},1000);
 refreshContinue();paintAvatar();showScreen('start');

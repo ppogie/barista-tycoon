@@ -173,7 +173,7 @@ export class CafeWorld {
         }else{this.avatarSprite.position.x+=delta.x/distance*step;this.avatarSprite.position.z+=delta.y/distance*step;this.shadow.position.x=this.avatarSprite.position.x;this.shadow.position.z=this.avatarSprite.position.z}
         this.avatarSprite.position.y=1.0+Math.sin(this._clock*13)*.035;
       }else this.avatarSprite.position.y=1.0+Math.sin(this._clock*2.8)*.011;
-      this.renderer.render(this.scene,this.camera);
+      this.onFrame?.(dt);this.renderer.render(this.scene,this.camera);
     }
     this._frame=requestAnimationFrame(tt=>this.tick(tt));
   }
